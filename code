@@ -1,0 +1,372 @@
+
+
+
+
+import math
+import matplotlib.pyplot as plt
+import numpy as np
+
+### Constante
+
+g = 9.81         # gravitation [m/s**2]
+
+### Paramètres du système
+
+#Masse de la grue et de son chargement
+m1 = 20  
+m2 = 15
+mtot = m1+m2
+
+mc = 1.5 #Masse du chargement déplacé
+d = 2 #Et la distance
+
+#Masse volumique
+rho_l = 1020
+
+#Longueur et largeur
+L = 1
+l = 1
+
+
+#hauteurs et points sur axe z
+z1 = l/2 - 0.035
+z2 = z1 + 0.05
+h1 = 0.8
+
+#Utile pour précisions
+borne_inf = 0.02
+borne_sup = 0.05
+précision = 0.01
+
+
+
+def volume_imm():
+    """Calcule le volume immergé,
+                    rho masse volumique du liquide,
+                    mtot = m1+m2= masse totale
+                    V_i est retourné en kg/m³"""
+    
+    V_i=float((mtot/(rho_l))) 
+    return V_i
+
+
+
+def H_c():
+    """
+    fonction calculant la hauteur immergé
+    cette fonction calcul la hauteur immergé d'un solide dans un liquide
+
+    arg:
+        L: la longueur du solide en metre
+        l: la largeur du solide en metre 
+        rho_l: la masse volumique du liquide
+        m: la masse du solide en kilos
+    
+    return
+        retourne la hauteur du solide immergé en metre 
+    """
+    #volume immergé 
+    V_i= volume_imm()
+    #hauteur immergé
+    h_c=float(V_i/(L*l))
+    return h_c
+
+
+def centre_gravitéZ(m1,z1,m2,z2):
+    """Renvoie le centre de gravité en Z (hauteur) en position initiale
+        m1 = barge + grue
+        m2 = chargement
+        z1, z2 = distance verticale (voir en fonction du repère)"""
+    
+    gz=((m1*z1)+(m2*z2))/(m1+m2)
+    return gz
+
+
+def centre_gravitéX(theta):
+    """Nouveau centre de gravité, après déplacement du bras
+        hc = enfoncement de la barge, theta = angle d'inclinaison en radians"""
+    gz = centre_gravitéZ(m1,z1,m2,z2)
+    hc = H_c()
+    xg = (gz-hc)*math.sin(theta)
+    return xg
+    
+    
+def centre_de_pousse_en_x(L):
+    """
+    centre de poussé a l'état initial
+    L: la longueur du solide en metre
+    l: la largeur du solide en metre
+    """
+
+    x = L/2
+    return x
+
+
+def centre_de_pousse_en_z(l):
+    """
+    centre de poussé a l'état initial
+    l: la largeur du solide en metre
+    """
+    z = l/2
+    return z
+    
+def pousee_x_bis (theta) :
+    """
+    coordonée x du point de poussée apres rotation (voir photo)
+    """
+    h = L*math.tan(theta)
+    h_c = H_c()
+    b = h_c - h/2
+    
+    B_bis_x = -(L+ b*math.sin(theta))
+    E_bis_x = L +(b+h)*math.sin(theta)
+    
+    C_bis_x = (B_bis_x*(3*b+h)+E_bis_x*(3*b+2*h))/2*(6*b+3*h)
+    return C_bis_x
+
+
+def moment_de_force1 (mc, d):
+    """
+    d = distance déplacement chargement par rapport centre de barge en metres
+    mc est la masse de l'objet déplacé en kilos
+    """
+    mom1 = mc*g*d
+    return mom1
+
+
+def distanceCG(theta):
+    """ donne la distance entre centre de pousée et centre de gravité selon l'axe x
+    """
+    distance = pousee_x_bis (theta) - centre_gravitéX(theta)
+    return distance
+
+
+
+def moment_de_force2(theta):
+    """
+    calcule le couple de redressement
+    """
+    mom2 = distanceCG(theta)*mtot*g
+    return mom2
+
+    
+def moment_de_force_equilibre(mc, d, theta):
+    """Renvoie le moment de force équilibre"""
+    return (moment_de_force1(mc, d) - moment_de_force2(theta))
+
+
+def angle_max(h1, L, mtot):
+    
+    """En radian, h1 = hauteur du centre de gravité en Z, renvoie l'angke max"""
+    
+    hc = H_c()
+    
+    
+    theta1 = math.atan((h1-hc)/(L/2)) 
+    theta2 = math.atan(hc/(L/2)) 
+    
+    if theta1>theta2:
+        return theta2
+    else:
+        return theta1
+    
+from random import *
+def rech_angl():
+    t=0
+    a=0
+    while t<100000:
+        a=random()*1
+        t+=1 
+        if position_x_centre_g_p(a)==1:
+            break
+    return a
+    
+
+
+### Paramètres de la simulation
+
+step = 0.001     # pas (dt) [s]
+end = 50.0    # durée [s]
+x_0 = 0.0     # position initiale [m]
+w_0 = 0.0       # vitesse initiale [m/s]
+
+t = np.arange(0, end, step)
+x = np.empty_like(t)          
+w = np.empty_like(t)
+a = np.empty_like(t)
+C = np.empty_like(t)
+C_bis = np.empty_like(t)
+a_bis =np.empty_like(t)
+w_bis = np.empty_like(t)
+inclinaison = np.empty_like(t)
+d = np.empty_like(t)
+radians=1
+theta_sub = math.atan((h1-H_c())/(L/2))
+theta_soul = math.atan(H_c()/(L/2))
+
+
+
+
+
+
+
+
+def simulation():
+    """
+    pre: -
+    post: exécute une simulation jusqu'à t=end par pas de dt=step.
+          Remplit les listes x, v, a des positions, vitesses et accélérations.
+    """
+    # conditions initiales
+    D=1#Fixé arbitrairement
+    I=4
+    x[0] = 0
+    w[0] = 0
+    w_bis[0] = 0
+    a_bis[0] = 0
+    C_bis[0] = 0
+    d[0] = 0
+    
+    
+    for i in range(len(t)-1):
+
+        dt = step
+        
+        #calcul du couple résultant
+        
+        C[i]= moment_de_force_equilibre(1.5 , 2, x[i])
+        a[i] = (-D*w[i]/I)-C[i]/I
+        
+        # calcul accélération, vitesse, position
+        
+        w[i+1] = w[i] + a[i]*dt
+        x[i+1] = x[i] +(w[i]+a[i]*dt)*dt
+        
+        #avec une charge mobile:
+        mc=[2]
+        
+        for p in range(len(mc)):
+           
+           C_bis[i+1]= moment_de_force_equilibre(mc[p],d[i], x[i])
+           d[i+1] = d[i] + dt/4 #fixé arbitrairement
+           a_bis[i] = (-D*w_bis[i]/I) - C_bis[i]/I
+           w_bis[i+1] = w_bis[i] + a_bis[i]*dt
+           inclinaison[i+1] =inclinaison[i] + w_bis[i]*dt
+    
+        
+        
+
+
+def graphiques():
+    
+    plt.figure(1)
+    plt.subplot(3,1,1)
+    plt.plot(t,x, label="Position (rad)")
+    #plt.plot([0,end], [theta_sub*radians, theta_sub*radians], '--r', label='Submersion')
+    #plt.plot([0,end], [-theta_sub*radians, -theta_sub*radians], '--r')
+    #plt.plot([0,end], [theta_soul*radians, theta_soul*radians], '--m', label='Soulèvement')
+    #plt.plot([0,end], [-theta_soul*radians, -theta_soul*radians], '--m')
+    plt.xlabel("Temps (secondes) ")
+    plt.ylabel("Position (rad)")
+    plt.legend()
+    
+    plt.subplot(3,1,2)
+    plt.plot(t,w, label="Vitesse angulaire (rad/s)")
+    plt.xlabel("Temps (secondes)")
+    plt.ylabel("Vitesse angulaire (rad/s)")
+    plt.legend()
+    
+    plt.subplot(3,1,3)
+    plt.plot(t,a, label="Accélération angulaire (rad/s^2)")
+    plt.xlabel("Temps (secondes) ")
+    plt.ylabel("Accélération angulaire (rad/s^2)")
+    plt.legend()
+    plt.show()
+    
+
+def graphique_charge():
+    plt.figure(1)
+    
+    plt.subplot(3,1,1)
+    plt.plot(d, inclinaison, label="Position (rad)")
+    plt.xlabel("Distance (m)")
+    plt.ylabel("Position (rad) ")
+    plt.legend()
+    
+    plt.subplot(3,1,2)
+    plt.plot(d,w_bis, label="Vitesse angulaire (rad/s)")
+    plt.xlabel("Distance (m)")
+    plt.ylabel("Vitesse angulaire (rad/s)")
+    plt.legend()
+    
+    plt.subplot(3,1,3)
+    plt.plot(d,a_bis, label="Accélération angulaire (rad/s^2)")
+    plt.xlabel("Distance (m)")
+    plt.ylabel("Accélération angulaire (rad/s^2)")
+    plt.legend()
+    
+    plt.show()
+
+
+    
+def graphique_phase():
+    
+    plt.title("Diagramme de phase")
+    plt.plot(x, w)
+    plt.xlabel("Position (rad)")
+    plt.ylabel("Vitesse angulaire (rad/s)")
+    plt.show()
+    
+def graphique_energy():
+
+    
+    #kinetic energy
+
+
+
+    a=np.arange(0,5000,0.1)
+    y=[]
+    E_k=0
+    for i in range (len(a)):
+        E_K = (1/2)*mtot*w[i]**2
+        y.append(E_K)
+    #---------------------------------------------------------------------
+    #Energie potentielle
+
+    xa=np.arange(0,5000,0.1)
+    
+    ya=[]
+    tot_en=[]
+    E_A=0
+    for i in range(len(xa)):
+        
+        
+        E_T= (1/2)*mtot*(x[i]**2)*(w[i]**2)  
+        tot_en.append(E_T)
+        
+        E_P = tot_en[i] - y[i] 
+        ya.append(E_P)
+   
+    
+
+    #--------------------------------------------------------------------
+    #graphique
+    plt.figure(1)
+    plt.plot(a,tot_en, label = "Energie totale (J)")
+    plt.plot(xa,ya,"r",label="Energie potentielle (J)")
+    plt.plot(a,y,"y",label="Energie cinétique (J)")
+    
+    plt.legend()
+    plt.show()
+    
+
+    
+
+
+#Lance les fonctions qui renvoient les graphiques
+simulation()
+graphiques()
+graphique_phase()
+graphique_energy()
+graphique_charge()
+
